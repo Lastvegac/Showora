@@ -1,0 +1,53 @@
+{
+  "name": "@showora/api",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/apps/api/src/main.js",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:migrate": "dotenv -e ../../.env -- prisma migrate deploy",
+    "db:configure": "tsx scripts/configure-plan.ts",
+    "test": "jest --runInBand --config jest.config.cjs",
+    "test:db": "tsx scripts/prepare-test-db.ts",
+    "test:integration": "dotenv -e ../../.env.test -- jest --runInBand --config jest.integration.config.cjs"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.9",
+    "@nestjs/core": "^11.1.9",
+    "@nestjs/platform-express": "^11.1.9",
+    "@nestjs/jwt": "^11.0.1",
+    "@nestjs/swagger": "^11.2.1",
+    "@nestjs/throttler": "^6.4.0",
+    "@prisma/client": "6.19.0",
+    "@showora/shared-types": "workspace:*",
+    "@showora/shared-validation": "workspace:*",
+    "argon2": "^0.44.0",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "nodemailer": "^7.0.10",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.25.0"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^11.1.9",
+    "@types/cookie-parser": "^1.4.9",
+    "@types/express": "^5.0.5",
+    "@types/jest": "^30.0.0",
+    "@types/nodemailer": "^7.0.4",
+    "@types/supertest": "^6.0.3",
+    "dotenv-cli": "^11.0.0",
+    "jest": "^30.2.0",
+    "prisma": "6.19.0",
+    "supertest": "^7.1.4",
+    "ts-jest": "^29.4.5",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "environment": "development",
+  "key": "local-trial",
+  "name": "Gói phát triển cục bộ",
+  "trialDays": 14,
+  "limits": { "staff": 5, "products": 0, "leads": 0, "mediaBytes": 0 }
+}

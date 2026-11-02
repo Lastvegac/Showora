@@ -1,0 +1,320 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("MIGRATION_DATABASE_URL")
+}
+
+model User {
+  id              String              @id @default(uuid()) @db.Uuid
+  email           String              @unique @db.VarChar(254)
+  displayName     String              @map("display_name") @db.VarChar(100)
+  passwordHash    String              @map("password_hash")
+  emailVerifiedAt DateTime?           @map("email_verified_at") @db.Timestamptz
+  disabledAt      DateTime?           @map("disabled_at") @db.Timestamptz
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+  members         TenantMember[]
+  sessions        AuthSession[]
+  tokens          IdentityToken[]
+  onboardings     OnboardingRequest[]
+
+  @@map("users")
+}
+
+model Tenant {
+  id            String           @id @default(uuid()) @db.Uuid
+  name          String           @db.VarChar(120)
+  status        String           @default("active")
+  timezone      String           @default("Asia/Ho_Chi_Minh")
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+  domains       TenantDomain[]
+  members       TenantMember[]
+  roles         Role[]
+  subscriptions Subscription[]
+  settings      WebsiteSettings?
+
+  @@map("tenants")
+}
+
+model TenantDomain {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  hostname   String   @unique @db.VarChar(253)
+  type       String   @default("subdomain")
+  status     String   @default("active")
+  verifiedAt DateTime @map("verified_at") @db.Timestamptz
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@map("tenant_domains")
+}
+
+model TenantMember {
+  id           String       @id @default(uuid()) @db.Uuid
+  tenantId     String       @map("tenant_id") @db.Uuid
+  userId       String       @map("user_id") @db.Uuid
+  status       String       @default("active")
+  authzVersion Int          @default(1) @map("authz_version")
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  roles        MemberRole[]
+  teams        TeamMember[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, userId])
+  @@unique([tenantId, id, userId])
+  @@index([tenantId, status])
+  @@map("tenant_members")
+}
+
+model Role {
+  id          String           @id @default(uuid()) @db.Uuid
+  tenantId    String           @map("tenant_id") @db.Uuid
+  key         String
+  name        String
+  isSystem    Boolean          @default(false) @map("is_system")
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  permissions RolePermission[]
+  members     MemberRole[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, key])
+  @@map("roles")
+}
+
+model Permission {
+  key         String           @id
+  description String
+  grants      RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id            String     @id @default(uuid()) @db.Uuid
+  tenantId      String     @map("tenant_id") @db.Uuid
+  roleId        String     @map("role_id") @db.Uuid
+  permissionKey String     @map("permission_key")
+  scope         String
+  role          Role       @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Restrict)
+  permission    Permission @relation(fields: [permissionKey], references: [key], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, roleId, permissionKey])
+  @@map("role_permissions")
+}
+
+model MemberRole {
+  id       String       @id @default(uuid()) @db.Uuid
+  tenantId String       @map("tenant_id") @db.Uuid
+  memberId String       @map("member_id") @db.Uuid
+  roleId   String       @map("role_id") @db.Uuid
+  member   TenantMember @relation(fields: [tenantId, memberId], references: [tenantId, id], onDelete: Restrict)
+  role     Role         @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, memberId, roleId])
+  @@map("member_roles")
+}
+
+model SalesTeam {
+  id        String       @id @default(uuid()) @db.Uuid
+  tenantId  String       @map("tenant_id") @db.Uuid
+  name      String
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  members   TeamMember[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, name])
+  @@map("sales_teams")
+}
+
+model TeamMember {
+  id       String       @id @default(uuid()) @db.Uuid
+  tenantId String       @map("tenant_id") @db.Uuid
+  teamId   String       @map("team_id") @db.Uuid
+  memberId String       @map("member_id") @db.Uuid
+  role     String
+  team     SalesTeam    @relation(fields: [tenantId, teamId], references: [tenantId, id], onDelete: Restrict)
+  member   TenantMember @relation(fields: [tenantId, memberId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, teamId, memberId])
+  @@map("team_members")
+}
+
+model MemberInvitation {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  email      String
+  tokenHash  String    @unique @map("token_hash")
+  roleIds    String[]  @map("role_ids") @db.Uuid
+  inviterId  String    @map("inviter_id") @db.Uuid
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz
+  acceptedAt DateTime? @map("accepted_at") @db.Timestamptz
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([tenantId, id])
+  @@index([tenantId, email])
+  @@map("member_invitations")
+}
+
+model SubscriptionPlan {
+  id       String        @id @default(uuid()) @db.Uuid
+  key      String        @unique
+  name     String
+  versions PlanVersion[]
+
+  @@map("subscription_plans")
+}
+
+model PlanVersion {
+  id            String           @id @default(uuid()) @db.Uuid
+  planId        String           @map("plan_id") @db.Uuid
+  version       Int
+  trialDays     Int              @map("trial_days")
+  limits        Json
+  isOnboarding  Boolean          @default(false) @map("is_onboarding")
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  plan          SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  subscriptions Subscription[]
+
+  @@unique([planId, version])
+  @@map("plan_versions")
+}
+
+model Subscription {
+  id            String      @id @default(uuid()) @db.Uuid
+  tenantId      String      @unique @map("tenant_id") @db.Uuid
+  planVersionId String      @map("plan_version_id") @db.Uuid
+  status        String      @default("TRIALING")
+  periodStart   DateTime    @map("period_start") @db.Timestamptz
+  periodEnd     DateTime    @map("period_end") @db.Timestamptz
+  graceEndsAt   DateTime?   @map("grace_ends_at") @db.Timestamptz
+  tenant        Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  planVersion   PlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@map("subscriptions")
+}
+
+model UsageRecord {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  resource  String
+  used      Int      @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, resource])
+  @@map("usage_records")
+}
+
+model WebsiteSettings {
+  id               String @id @default(uuid()) @db.Uuid
+  tenantId         String @unique @map("tenant_id") @db.Uuid
+  templateKey      String @default("showcase-v1") @map("template_key")
+  homepageSections Json   @default("[]") @map("homepage_sections")
+  contact          Json   @default("{}")
+  tenant           Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@map("website_settings")
+}
+
+model OnboardingRequest {
+  id         String          @id @default(uuid()) @db.Uuid
+  userId     String          @map("user_id") @db.Uuid
+  tenantName String          @map("tenant_name")
+  subdomain  String
+  status     String          @default("pending")
+  expiresAt  DateTime        @map("expires_at") @db.Timestamptz
+  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  user       User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  tokens     IdentityToken[]
+
+  @@index([userId, status])
+  @@map("onboarding_requests")
+}
+
+model IdentityToken {
+  id           String             @id @default(uuid()) @db.Uuid
+  userId       String             @map("user_id") @db.Uuid
+  onboardingId String?            @map("onboarding_id") @db.Uuid
+  purpose      String
+  tokenHash    String             @unique @map("token_hash")
+  expiresAt    DateTime           @map("expires_at") @db.Timestamptz
+  consumedAt   DateTime?          @map("consumed_at") @db.Timestamptz
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  user         User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  onboarding   OnboardingRequest? @relation(fields: [onboardingId], references: [id], onDelete: Restrict)
+
+  @@map("identity_tokens")
+}
+
+model AuthSession {
+  id        String         @id @default(uuid()) @db.Uuid
+  userId    String         @map("user_id") @db.Uuid
+  tenantId  String         @map("tenant_id") @db.Uuid
+  memberId  String         @map("member_id") @db.Uuid
+  expiresAt DateTime       @map("expires_at") @db.Timestamptz
+  revokedAt DateTime?      @map("revoked_at") @db.Timestamptz
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  user      User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  tokens    RefreshToken[]
+
+  @@index([userId, revokedAt])
+  @@map("auth_sessions")
+}
+
+model RefreshToken {
+  id         String      @id @default(uuid()) @db.Uuid
+  sessionId  String      @map("session_id") @db.Uuid
+  tokenHash  String      @unique @map("token_hash")
+  parentId   String?     @unique @map("parent_id") @db.Uuid
+  consumedAt DateTime?   @map("consumed_at") @db.Timestamptz
+  expiresAt  DateTime    @map("expires_at") @db.Timestamptz
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  session    AuthSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+
+  @@map("refresh_tokens")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  actorId   String   @map("actor_id") @db.Uuid
+  action    String
+  entityId  String   @map("entity_id")
+  requestId String   @map("request_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([tenantId, id])
+  @@index([tenantId, createdAt, id])
+  @@map("audit_logs")
+}
+
+model SystemOutboxEvent {
+  id               String    @id @default(uuid()) @db.Uuid
+  dedupKey         String    @unique @map("dedup_key")
+  encryptedPayload String    @map("encrypted_payload")
+  status           String    @default("pending")
+  attempts         Int       @default(0)
+  availableAt      DateTime  @default(now()) @map("available_at") @db.Timestamptz
+  leaseUntil       DateTime? @map("lease_until") @db.Timestamptz
+  deliveredAt      DateTime? @map("delivered_at") @db.Timestamptz
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([status, availableAt])
+  @@map("system_outbox_events")
+}
